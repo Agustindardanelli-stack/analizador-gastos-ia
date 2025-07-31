@@ -1,0 +1,88 @@
+{
+  "fecha_reporte": "2025-07-30T21:52:56.821228",
+  "total_gastos": 36,
+  "monto_total": 443431.55,
+  "periodo": {
+    "desde": "2024-01-15T00:00:00",
+    "hasta": "2024-02-20T00:00:00"
+  },
+  "categorias": {
+    "Alimentación": {
+      "cantidad": 6,
+      "total": 65501.55,
+      "promedio": 10916.925000000001,
+      "porcentaje": 14.77151321325693
+    },
+    "Transporte": {
+      "cantidad": 5,
+      "total": 28950.0,
+      "promedio": 5790.0,
+      "porcentaje": 6.528628826703919
+    },
+    "Servicios": {
+      "cantidad": 5,
+      "total": 87400.0,
+      "promedio": 17480.0,
+      "porcentaje": 19.709919152121675
+    },
+    "Entretenimiento": {
+      "cantidad": 4,
+      "total": 19280.0,
+      "promedio": 4820.0,
+      "porcentaje": 4.347908938820433
+    },
+    "Salud": {
+      "cantidad": 5,
+      "total": 48800.0,
+      "promedio": 9760.0,
+      "porcentaje": 11.005080716516451
+    },
+    "Ropa": {
+      "cantidad": 4,
+      "total": 84400.0,
+      "promedio": 21100.0,
+      "porcentaje": 19.033377304794843
+    },
+    "Hogar": {
+      "cantidad": 4,
+      "total": 60600.0,
+      "promedio": 15150.0,
+      "porcentaje": 13.666145316001984
+    },
+    "Educación": {
+      "cantidad": 3,
+      "total": 48500.0,
+      "promedio": 16166.666666666666,
+      "porcentaje": 10.937426531783768
+    }
+  },
+  "top_gastos": [
+    {
+      "descripcion": "expensas edificio",
+      "monto": 45000.0,
+      "categoria": "Servicios"
+    },
+    {
+      "descripcion": "ikea escritorio",
+      "monto": 45000.0,
+      "categoria": "Hogar"
+    },
+    {
+      "descripcion": "nike zapatillas running",
+      "monto": 35000.0,
+      "categoria": "Ropa"
+    },
+    {
+      "descripcion": "adidas campera",
+      "monto": 28000.0,
+      "categoria": "Ropa"
+    },
+    {
+      "descripcion": "restaurant don julio",
+      "monto": 25000.0,
+      "categoria": "Alimentación"
+    }
+  ],
+  "anomalias": 2,
+  "modelo_accuracy": 0.875
+}

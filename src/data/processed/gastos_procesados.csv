@@ -1,0 +1,37 @@
+fecha,descripcion,monto,categoria,año,mes,dia,dia_semana,dia_semana_nombre,mes_nombre,trimestre,es_fin_semana,z_score,is_anomaly
+2024-01-15,supermercado carrefour villa crespo,18500.5,Alimentación,2024,1,15,0,Monday,January,1,False,0.5403778766922911,False
+2024-01-16,panaderia la esquina,3200.0,Alimentación,2024,1,16,1,Tuesday,January,1,False,0.7968547413933759,False
+2024-01-17,mcdonalds palermo,4800.75,Alimentación,2024,1,17,2,Wednesday,January,1,False,0.6569524432070009,False
+2024-01-18,restaurant don julio,25000.0,Alimentación,2024,1,18,3,Thursday,January,1,False,1.1084209734046726,False
+2024-01-19,verduleria central,5500.3,Alimentación,2024,1,19,4,Friday,January,1,False,0.5958131942947543,False
+2024-01-20,uber viaje centro,2800.0,Transporte,2024,1,20,5,Saturday,January,1,True,0.831813928820863,False
+2024-01-21,ypf combustible,15000.0,Transporte,2024,1,21,6,Sunday,January,1,True,0.23444128771749437,False
+2024-01-22,sube recarga,2000.0,Transporte,2024,1,22,0,Monday,January,1,False,0.9017323036758372,False
+2024-01-23,taxi aeropuerto,8500.0,Transporte,2024,1,23,1,Tuesday,January,1,False,0.3336455079791715,False
+2024-01-24,peaje autopista,650.0,Transporte,2024,1,24,2,Wednesday,January,1,False,1.0197195612436063,False
+2024-01-25,edenor factura electricidad,12000.0,Servicios,2024,1,25,3,Thursday,January,1,False,0.027752617988659085,False
+2024-01-26,movistar plan celular,8900.0,Servicios,2024,1,26,4,Friday,January,1,False,0.2986863205516843,False
+2024-01-27,fibertel internet,6500.0,Servicios,2024,1,27,5,Saturday,January,1,True,0.508441445116607,False
+2024-01-28,metrogas factura,15000.0,Servicios,2024,1,28,6,Sunday,January,1,True,0.23444128771749437,False
+2024-01-29,expensas edificio,45000.0,Servicios,2024,1,29,0,Monday,January,1,False,2.856380344779029,True
+2024-01-30,netflix suscripcion,2490.0,Entretenimiento,2024,1,30,1,Tuesday,January,1,False,0.8589072990771656,False
+2024-02-01,cine hoyts palermo,3500.0,Entretenimiento,2024,2,1,3,Thursday,February,1,False,0.7706353508227606,False
+2024-02-02,spotify premium,1290.0,Entretenimiento,2024,2,2,4,Friday,February,1,False,0.9637848613596269,False
+2024-02-03,bar antares cerveza,8500.0,Alimentación,2024,2,3,5,Saturday,February,1,True,0.3336455079791715,False
+2024-02-04,steam videojuego,12000.0,Entretenimiento,2024,2,4,6,Sunday,February,1,True,0.027752617988659085,False
+2024-02-05,farmacity medicamentos,4500.0,Salud,2024,2,5,0,Monday,February,1,False,0.6832373822540427,False
+2024-02-06,dr martinez consulta,15000.0,Salud,2024,2,6,1,Tuesday,February,1,False,0.23444128771749437,False
+2024-02-07,dentista limpieza,18000.0,Salud,2024,2,7,2,Wednesday,February,1,False,0.4966351934236478,False
+2024-02-08,laboratorio analisis,8500.0,Salud,2024,2,8,3,Thursday,February,1,False,0.3336455079791715,False
+2024-02-09,farmacia del pueblo,2800.0,Salud,2024,2,9,4,Friday,February,1,False,0.831813928820863,False
+2024-02-10,zara camisa trabajo,12500.0,Ropa,2024,2,10,5,Saturday,February,1,True,0.015946366295699826,False
+2024-02-11,nike zapatillas running,35000.0,Ropa,2024,2,11,6,Sunday,February,1,True,1.9824006590918506,False
+2024-02-12,h m pantalon jean,8900.0,Ropa,2024,2,12,0,Monday,February,1,False,0.2986863205516843,False
+2024-02-13,adidas campera,28000.0,Ropa,2024,2,13,1,Tuesday,February,1,False,1.3706148791108261,False
+2024-02-14,easy herramientas,5500.0,Hogar,2024,2,14,2,Wednesday,February,1,False,0.5958394136853249,False
+2024-02-15,sodimac pintura,8900.0,Hogar,2024,2,15,3,Thursday,February,1,False,0.2986863205516843,False
+2024-02-16,detergente skip,1200.0,Hogar,2024,2,16,4,Friday,February,1,False,0.9716506785308116,False
+2024-02-17,ikea escritorio,45000.0,Hogar,2024,2,17,5,Saturday,February,1,True,2.856380344779029,True
+2024-02-18,universidad utn cuota,25000.0,Educación,2024,2,18,6,Sunday,February,1,True,1.1084209734046726,False
+2024-02-19,udemy curso python,15000.0,Educación,2024,2,19,0,Monday,February,1,False,0.23444128771749437,False
+2024-02-20,libros amazon,8500.0,Educación,2024,2,20,1,Tuesday,February,1,False,0.3336455079791715,False
