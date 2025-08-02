@@ -8,9 +8,14 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import logging
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any, Union, Optional, Callable  # ← AGREGAR ESTA LÍNEA
 import locale
-
+import psutil
+import time
+from sklearn.ensemble import IsolationForest
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import gc
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -417,3 +422,286 @@ if __name__ == "__main__":
         print(f"   {name}: {DateHelper.format_date_range(range_info['start'], range_info['end'])}")
     
     print(f"\n✅ Configuración lista para usar")
+
+class MemoryMonitor:
+    """Monitor de uso de memoria del sistema"""
+    
+    def __init__(self):
+        self.baseline_memory = self.get_current_memory()
+        self.peak_memory = self.baseline_memory
+        
+    def get_current_memory(self) -> Dict:
+        """Obtener uso actual de memoria"""
+        try:
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            system_memory = psutil.virtual_memory()
+            
+            return {
+                'process_mb': memory_info.rss / (1024 * 1024),
+                'process_percent': process.memory_percent(),
+                'system_total_mb': system_memory.total / (1024 * 1024),
+                'system_available_mb': system_memory.available / (1024 * 1024),
+                'system_percent': system_memory.percent
+            }
+        except:
+            return {'error': 'No se pudo obtener información de memoria'}
+    
+    def check_memory_usage(self) -> Dict:
+        """Verificar uso de memoria y detectar problemas"""
+        current = self.get_current_memory()
+        
+        if 'error' not in current:
+            # Actualizar pico
+            if current['process_mb'] > self.peak_memory['process_mb']:
+                self.peak_memory = current.copy()
+            
+            # Calcular incremento desde baseline
+            memory_increase = current['process_mb'] - self.baseline_memory['process_mb']
+            
+            # Generar alertas
+            alerts = []
+            if current['process_percent'] > 50:
+                alerts.append(f"⚠️ Alto uso de memoria del proceso: {current['process_percent']:.1f}%")
+            if current['system_percent'] > 85:
+                alerts.append(f"⚠️ Memoria del sistema baja: {current['system_percent']:.1f}%")
+            if memory_increase > 500:  # 500MB
+                alerts.append(f"⚠️ Incremento significativo de memoria: +{memory_increase:.1f}MB")
+            
+            return {
+                'current': current,
+                'baseline': self.baseline_memory,
+                'peak': self.peak_memory,
+                'memory_increase_mb': memory_increase,
+                'alerts': alerts,
+                'status': 'warning' if alerts else 'ok'
+            }
+        
+        return current
+
+# 3. MEJORAR ExpenseAnalyzer CON DETECCIÓN DE ANOMALÍAS:
+
+class EnhancedExpenseAnalyzer(ExpenseAnalyzer):
+    """Analizador mejorado con detección de anomalías avanzada"""
+    
+    def __init__(self, config: ConfigManager = None):
+        super().__init__(config)
+        self.anomaly_detector = None
+        self.memory_monitor = MemoryMonitor()
+    
+    def detect_advanced_anomalies(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Detectar anomalías usando múltiples métodos"""
+        df_anomalies = df.copy()
+        
+        if len(df) < 10:
+            df_anomalies['is_anomaly'] = False
+            return df_anomalies
+        
+        # Método 1: Isolation Forest
+        try:
+            features = []
+            if 'monto' in df.columns:
+                features.append(df['monto'].values.reshape(-1, 1))
+            
+            if 'fecha' in df.columns:
+                df_temp = df.copy()
+                df_temp['fecha'] = pd.to_datetime(df_temp['fecha'])
+                temporal_features = np.column_stack([
+                    df_temp['fecha'].dt.hour.values,
+                    df_temp['fecha'].dt.dayofweek.values
+                ])
+                features.append(temporal_features)
+            
+            if features:
+                combined_features = np.hstack(features)
+                
+                # Entrenar detector si no existe
+                if self.anomaly_detector is None:
+                    self.anomaly_detector = IsolationForest(
+                        contamination=0.1, 
+                        random_state=42,
+                        n_estimators=50  # Reducido para mejor performance
+                    )
+                    self.anomaly_detector.fit(combined_features)
+                
+                # Detectar anomalías
+                anomaly_labels = self.anomaly_detector.predict(combined_features)
+                df_anomalies['is_ml_anomaly'] = anomaly_labels == -1
+            else:
+                df_anomalies['is_ml_anomaly'] = False
+        
+        except Exception as e:
+            logger.warning(f"Error en detección ML de anomalías: {e}")
+            df_anomalies['is_ml_anomaly'] = False
+        
+        # Método 2: Reglas de negocio (del método original)
+        df_anomalies = super().detect_anomalies(df_anomalies)
+        
+        # Método 3: Detección por categoría
+        if 'categoria' in df.columns and 'monto' in df.columns:
+            category_anomalies = []
+            for _, row in df_anomalies.iterrows():
+                cat_data = df_anomalies[df_anomalies['categoria'] == row['categoria']]
+                if len(cat_data) > 3:
+                    cat_mean = cat_data['monto'].mean()
+                    cat_std = cat_data['monto'].std()
+                    z_score = abs((row['monto'] - cat_mean) / cat_std) if cat_std > 0 else 0
+                    category_anomalies.append(z_score > 2.5)
+                else:
+                    category_anomalies.append(False)
+            
+            df_anomalies['is_category_anomaly'] = category_anomalies
+        
+        # Combinar todas las detecciones
+        df_anomalies['is_any_anomaly'] = (
+            df_anomalies.get('is_anomaly', False) |
+            df_anomalies.get('is_ml_anomaly', False) |
+            df_anomalies.get('is_category_anomaly', False)
+        )
+        
+        return df_anomalies
+    
+    def get_performance_insights(self, df: pd.DataFrame) -> Dict:
+        """Obtener insights de performance del análisis"""
+        
+        insights = super().get_category_insights(df)
+        
+        # Agregar métricas de memoria
+        memory_status = self.memory_monitor.check_memory_usage()
+        insights['system_performance'] = {
+            'memory_status': memory_status,
+            'data_size_mb': df.memory_usage(deep=True).sum() / (1024 * 1024),
+            'processing_recommendations': self._get_processing_recommendations(df, memory_status)
+        }
+        
+        return insights
+    
+    def _get_processing_recommendations(self, df: pd.DataFrame, memory_status: Dict) -> List[str]:
+        """Generar recomendaciones de procesamiento"""
+        recommendations = []
+        
+        # Recomendaciones por tamaño de datos
+        if len(df) > 10000:
+            recommendations.append("💡 Dataset grande - considerar procesamiento por lotes")
+        
+        # Recomendaciones por memoria
+        if memory_status['status'] == 'warning':
+            recommendations.append("⚠️ Alto uso de memoria - optimizar procesamiento")
+            
+        if memory_status['current'].get('process_mb', 0) > 1000:
+            recommendations.append("🔧 Usar técnicas de reducción de memoria")
+        
+        # Recomendaciones por categorías
+        if 'categoria' in df.columns:
+            unique_categories = df['categoria'].nunique()
+            if unique_categories > 20:
+                recommendations.append("📊 Muchas categorías - revisar clasificación")
+        
+        return recommendations
+
+# 4. AGREGAR CLASE DE PROCESAMIENTO ASÍNCRONO:
+
+class AsyncProcessor:
+    """Procesador asíncrono para tareas pesadas"""
+    
+    def __init__(self, max_workers: int = 2):
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.active_tasks = {}
+        
+    def process_async(self, func, *args, **kwargs) -> str:
+        """Ejecutar función de forma asíncrona"""
+        task_id = f"task_{int(time.time() * 1000)}"
+        
+        future = self.executor.submit(func, *args, **kwargs)
+        self.active_tasks[task_id] = {
+            'future': future,
+            'start_time': time.time(),
+            'function': func.__name__
+        }
+        
+        return task_id
+    
+    def get_result(self, task_id: str, timeout: float = None) -> Optional[any]:
+        """Obtener resultado de tarea asíncrona"""
+        if task_id not in self.active_tasks:
+            return None
+        
+        task = self.active_tasks[task_id]
+        try:
+            result = task['future'].result(timeout=timeout)
+            # Limpiar tarea completada
+            del self.active_tasks[task_id]
+            return result
+        except Exception as e:
+            logger.error(f"Error en tarea {task_id}: {e}")
+            return None
+    
+    def get_task_status(self, task_id: str) -> Dict:
+        """Obtener estado de tarea"""
+        if task_id not in self.active_tasks:
+            return {'status': 'not_found'}
+        
+        task = self.active_tasks[task_id]
+        elapsed_time = time.time() - task['start_time']
+        
+        return {
+            'status': 'completed' if task['future'].done() else 'running',
+            'function': task['function'],
+            'elapsed_time': elapsed_time,
+            'is_done': task['future'].done()
+        }
+    
+    def shutdown(self):
+        """Cerrar executor"""
+        self.executor.shutdown(wait=True)
+
+# 5. FUNCIÓN DE UTILIDAD PARA OPTIMIZACIÓN:
+
+def optimize_dataframe_for_analysis(df: pd.DataFrame) -> pd.DataFrame:
+    """Optimizar DataFrame para análisis más eficiente"""
+    df_optimized = df.copy()
+    
+    # Optimizar tipos de datos
+    for column in df_optimized.columns:
+        if df_optimized[column].dtype == 'object':
+            # Intentar conversión a categoría si hay pocos valores únicos
+            unique_ratio = df_optimized[column].nunique() / len(df_optimized)
+            if unique_ratio < 0.5:
+                df_optimized[column] = df_optimized[column].astype('category')
+        
+        elif 'int' in str(df_optimized[column].dtype):
+            # Downcast enteros
+            df_optimized[column] = pd.to_numeric(df_optimized[column], downcast='integer')
+        
+        elif 'float' in str(df_optimized[column].dtype):
+            # Downcast floats
+            df_optimized[column] = pd.to_numeric(df_optimized[column], downcast='float')
+    
+    return df_optimized
+
+# 6. MEJORAR ConfigManager CON CONFIGURACIONES DE PERFORMANCE:
+
+# Agregar esta función al ConfigManager existente:
+def add_performance_config(self) -> Dict:
+    """Agregar configuraciones de performance al config existente"""
+    performance_config = {
+        "performance": {
+            "cache_enabled": True,
+            "cache_size": 1000,
+            "batch_size": 50,
+            "memory_threshold_mb": 1000,
+            "async_processing": True,
+            "max_workers": 2,
+            "anomaly_detection": {
+                "enabled": True,
+                "contamination": 0.1,
+                "methods": ["isolation_forest", "statistical", "category_based"]
+            }
+        }
+    }
+    
+    self.config.update(performance_config)
+    return performance_config
+
+# Agregar este método a ConfigManager:
+ConfigManager.add_performance_config = add_performance_config    

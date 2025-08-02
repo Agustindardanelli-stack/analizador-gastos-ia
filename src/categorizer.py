@@ -17,6 +17,7 @@ from nltk.tokenize import word_tokenize
 import re
 from typing import List, Dict, Tuple, Optional
 import logging
+import time
 from pathlib import Path
 
 # Configurar logging
@@ -693,3 +694,361 @@ if __name__ == "__main__":
     for categoria, count in distribution['counts'].items():
         percentage = distribution['percentages'][categoria]
         print(f"   {categoria}: {count} gastos ({percentage:.1f}%)")
+
+
+class ImprovedIntelligentCategorizer(IntelligentCategorizer):
+    """
+    Versión mejorada del categorizador que soluciona el problema de features
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.pipeline = None
+        self.feature_names = None
+        self.model_metadata = {}
+        
+        # Configuración mejorada del vectorizador
+        self.vectorizer = TfidfVectorizer(
+            max_features=500,  # Reducido para evitar el error de features
+            stop_words=None,
+            lowercase=True,
+            ngram_range=(1, 2),
+            min_df=2,  # Palabras deben aparecer al menos 2 veces
+            max_df=0.95,  # Ignorar palabras muy frecuentes
+            sublinear_tf=True
+        )
+        
+        # Clasificador mejorado
+        self.classifier = RandomForestClassifier(
+            n_estimators=150,
+            max_depth=15,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            max_features='sqrt',
+            random_state=42,
+            class_weight='balanced'  # Para datos desbalanceados
+        )
+    
+    def create_consistent_features(self, descriptions: List[str], fit: bool = False) -> np.ndarray:
+        """
+        Crear características de manera consistente - SOLUCIONA EL ERROR DE FEATURES
+        """
+        # Preprocesar descripciones
+        processed_descriptions = [self.preprocess_text(desc) for desc in descriptions]
+        
+        if fit:
+            # Durante entrenamiento: fit el vectorizador
+            tfidf_features = self.vectorizer.fit_transform(processed_descriptions)
+        else:
+            # Durante predicción: solo transform
+            tfidf_features = self.vectorizer.transform(processed_descriptions)
+        
+        # Convertir a array denso
+        if hasattr(tfidf_features, 'toarray'):
+            tfidf_features = tfidf_features.toarray()
+        
+        # Características de palabras clave (siempre mismo tamaño)
+        keyword_features = []
+        for desc in processed_descriptions:
+            features = []
+            for category, info in self.category_keywords.items():
+                matches = sum(1 for keyword in info['keywords'] if keyword in desc)
+                weighted_score = matches * info['weight']
+                features.append(weighted_score)
+            keyword_features.append(features)
+        
+        keyword_features = np.array(keyword_features)
+        
+        # Combinar características
+        combined_features = np.hstack([tfidf_features, keyword_features])
+        
+        # Guardar nombres de características para debugging
+        if fit:
+            self.feature_names = (
+                [f"tfidf_{i}" for i in range(tfidf_features.shape[1])] +
+                [f"keyword_{cat}" for cat in self.category_keywords.keys()]
+            )
+            logger.info(f"Features creadas: {combined_features.shape[1]} total")
+        
+        return combined_features
+    
+    def train_improved(self, df: pd.DataFrame, target_column: str = None) -> Dict:
+        """
+        Entrenamiento mejorado que soluciona problemas de features
+        """
+        logger.info("🚀 Iniciando entrenamiento mejorado...")
+        
+        if target_column and target_column in df.columns:
+            training_data = df[['descripcion', target_column]].copy()
+            training_data = training_data.rename(columns={target_column: 'categoria'})
+        else:
+            training_data = self.generate_training_data(df)
+        
+        training_data = training_data.dropna(subset=['descripcion', 'categoria'])
+        
+        if len(training_data) < 10:
+            logger.warning("Pocos datos de entrenamiento. Usando método de reglas.")
+            self.is_trained = False
+            return {'status': 'rule_based', 'samples': len(training_data)}
+        
+        # Preparar datos
+        X_descriptions = training_data['descripcion'].tolist()
+        y = self.label_encoder.fit_transform(training_data['categoria'])
+        
+        # Crear características de forma consistente
+        X = self.create_consistent_features(X_descriptions, fit=True)
+        
+        # Dividir datos si hay suficientes
+        if len(training_data) > 20:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+        else:
+            X_train, X_test, y_train, y_test = X, X, y, y
+        
+        # Entrenar modelo
+        start_time = time.time()
+        self.classifier.fit(X_train, y_train)
+        training_time = time.time() - start_time
+        
+        # Evaluar
+        y_pred = self.classifier.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        
+        # Guardar metadata
+        self.model_metadata = {
+            'training_date': datetime.now().isoformat(),
+            'training_samples': len(training_data),
+            'feature_count': X.shape[1],
+            'categories': self.label_encoder.classes_.tolist(),
+            'accuracy': accuracy,
+            'training_time': training_time
+        }
+        
+        self.is_trained = True
+        
+        results = {
+            'status': 'trained_improved',
+            'accuracy': accuracy,
+            'samples': len(training_data),
+            'features': X.shape[1],
+            'categories': self.label_encoder.classes_.tolist(),
+            'training_time': training_time
+        }
+        
+        logger.info(f"✅ Entrenamiento completado - Accuracy: {accuracy:.3f}, Features: {X.shape[1]}")
+        
+        return results
+    
+    def predict_improved(self, descriptions: List[str]) -> List[str]:
+        """
+        Predicción mejorada que usa features consistentes
+        """
+        if not descriptions:
+            return []
+        
+        if not self.is_trained:
+            return self._rule_based_prediction(descriptions)
+        
+        try:
+            # Crear características consistentes (sin fit)
+            X = self.create_consistent_features(descriptions, fit=False)
+            
+            # Predecir
+            y_pred = self.classifier.predict(X)
+            
+            # Convertir a categorías
+            categories = self.label_encoder.inverse_transform(y_pred)
+            
+            return categories.tolist()
+            
+        except Exception as e:
+            logger.error(f"Error en predicción mejorada: {e}")
+            return self._rule_based_prediction(descriptions)
+    
+    def predict_with_confidence_improved(self, descriptions: List[str]) -> List[Dict]:
+        """
+        Predicción con confianza mejorada
+        """
+        if not descriptions:
+            return []
+        
+        results = []
+        
+        if self.is_trained:
+            try:
+                X = self.create_consistent_features(descriptions, fit=False)
+                y_pred = self.classifier.predict(X)
+                y_proba = self.classifier.predict_proba(X)
+                
+                for i, desc in enumerate(descriptions):
+                    predicted_category = self.label_encoder.inverse_transform([y_pred[i]])[0]
+                    confidence = np.max(y_proba[i])
+                    
+                    results.append({
+                        'descripcion': desc,
+                        'categoria': predicted_category,
+                        'confidence': confidence,
+                        'method': 'ml_improved',
+                        'feature_count': X.shape[1]
+                    })
+                
+                return results
+                
+            except Exception as e:
+                logger.error(f"Error en predicción con confianza: {e}")
+        
+        # Fallback a reglas
+        for desc in descriptions:
+            processed_desc = self.preprocess_text(desc)
+            
+            best_category = 'Otros'
+            best_score = 0
+            
+            for category, info in self.category_keywords.items():
+                score = sum(info['weight'] for keyword in info['keywords'] if keyword in processed_desc)
+                if score > best_score:
+                    best_score = score
+                    best_category = category
+            
+            confidence = min(best_score / 5.0, 1.0) if best_score > 0 else 0.1
+            
+            results.append({
+                'descripcion': desc,
+                'categoria': best_category,
+                'confidence': confidence,
+                'method': 'rules_fallback'
+            })
+        
+        return results        
+    
+
+
+class PredictionCache:
+    """Caché simple para predicciones"""
+    
+    def __init__(self, max_size: int = 1000):
+        self.cache = {}
+        self.max_size = max_size
+        self.hits = 0
+        self.misses = 0
+    
+    def get(self, description: str) -> Optional[Dict]:
+        key = description.lower().strip()
+        if key in self.cache:
+            self.hits += 1
+            return self.cache[key].copy()
+        self.misses += 1
+        return None
+    
+    def set(self, description: str, prediction: Dict):
+        if len(self.cache) >= self.max_size:
+            # Remover el más antiguo (simple)
+            oldest_key = next(iter(self.cache))
+            del self.cache[oldest_key]
+        
+        key = description.lower().strip()
+        self.cache[key] = prediction.copy()
+    
+    def get_stats(self) -> Dict:
+        total = self.hits + self.misses
+        return {
+            'size': len(self.cache),
+            'hits': self.hits,
+            'misses': self.misses,
+            'hit_rate': self.hits / total if total > 0 else 0
+        }    
+    
+
+class OptimizedCategorizer:
+    """Categorizador optimizado con caché"""
+    
+    def __init__(self, base_categorizer: IntelligentCategorizer = None):
+        self.base_categorizer = base_categorizer or ImprovedIntelligentCategorizer()
+        self.cache = PredictionCache()
+        self.performance_stats = {
+            'total_predictions': 0,
+            'cache_hits': 0,
+            'total_time': 0.0
+        }
+    
+    def predict_single_cached(self, description: str) -> Dict:
+        """Predicción individual con caché"""
+        start_time = time.time()
+        
+        # Verificar caché
+        cached_result = self.cache.get(description)
+        if cached_result:
+            self.performance_stats['cache_hits'] += 1
+            self.performance_stats['total_predictions'] += 1
+            return cached_result
+        
+        # Predicción nueva
+        if hasattr(self.base_categorizer, 'predict_with_confidence_improved'):
+            result = self.base_categorizer.predict_with_confidence_improved([description])[0]
+        else:
+            result = self.base_categorizer.predict_with_confidence([description])[0]
+        
+        # Guardar en caché
+        self.cache.set(description, result)
+        
+        # Estadísticas
+        self.performance_stats['total_predictions'] += 1
+        self.performance_stats['total_time'] += time.time() - start_time
+        
+        return result
+    
+    def get_performance_stats(self) -> Dict:
+        stats = self.performance_stats.copy()
+        cache_stats = self.cache.get_stats()
+        
+        if stats['total_predictions'] > 0:
+            stats['avg_time_per_prediction'] = stats['total_time'] / stats['total_predictions']
+        
+        stats['cache_stats'] = cache_stats
+        return stats
+
+# 5. FUNCIÓN DE UTILIDAD MEJORADA:
+
+def categorize_expenses_improved(df: pd.DataFrame, model_path: str = None, use_cache: bool = True) -> pd.DataFrame:
+    """
+    Función mejorada para categorizar gastos con mejor rendimiento
+    """
+    # Usar categorizador mejorado
+    base_categorizer = ImprovedIntelligentCategorizer()
+    
+    # Cargar modelo si existe
+    if model_path and Path(model_path).exists():
+        if base_categorizer.load_model(model_path):
+            logger.info(f"✅ Modelo cargado desde: {model_path}")
+        else:
+            logger.warning("❌ Error cargando modelo, entrenando nuevo")
+            base_categorizer.train_improved(df)
+    else:
+        # Entrenar nuevo modelo
+        results = base_categorizer.train_improved(df)
+        logger.info(f"✅ Nuevo modelo entrenado: {results['status']}")
+    
+    # Usar categorizador optimizado si se requiere caché
+    if use_cache:
+        categorizer = OptimizedCategorizer(base_categorizer)
+        descriptions = df['descripcion'].tolist()
+        predictions = [categorizer.predict_single_cached(desc) for desc in descriptions]
+        
+        # Mostrar estadísticas de caché
+        stats = categorizer.get_performance_stats()
+        logger.info(f"📊 Cache hit rate: {stats['cache_stats']['hit_rate']:.2%}")
+    else:
+        descriptions = df['descripcion'].tolist()
+        if hasattr(base_categorizer, 'predict_with_confidence_improved'):
+            predictions = base_categorizer.predict_with_confidence_improved(descriptions)
+        else:
+            predictions = base_categorizer.predict_with_confidence(descriptions)
+    
+    # Preparar resultado
+    df_result = df.copy()
+    df_result['categoria'] = [p['categoria'] for p in predictions]
+    df_result['confidence'] = [p['confidence'] for p in predictions]
+    df_result['method'] = [p['method'] for p in predictions]
+    
+    return df_result    

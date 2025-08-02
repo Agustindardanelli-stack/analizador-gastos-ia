@@ -279,389 +279,587 @@ def main():
         "📋 Reportes"
     ])
     
-    # TAB 1: Cargar datos
     with tab1:
-        st.header("📤 Cargar tus Datos de Gastos")
         
-        col1, col2 = st.columns([2, 1])
+        st.header("💰 ¿Cómo quieres agregar tus gastos?")
         
-        with col1:
-            # Área de carga con estilo
-            st.markdown('<div class="upload-section">', unsafe_allow_html=True)
-            st.markdown("### 🎯 Arrastra tu archivo aquí")
-            
-            uploaded_file = st.file_uploader(
-                "Selecciona tu archivo de gastos",
-                type=['csv', 'xlsx', 'xls', 'json'],
-                help="Formatos: CSV, Excel, JSON"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Botones de acción
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                if st.button("🧪 Usar Datos de Ejemplo", type="secondary", use_container_width=True):
-                    st.session_state['use_example'] = True
-            
-            with col_btn2:
-                if st.button("🔄 Limpiar Datos", type="secondary", use_container_width=True):
-                    st.session_state.clear()
-                    st.rerun()
+        # Selector de método de entrada
+        input_method = st.radio(
+            "Elige tu método preferido:",
+            [
+                "✍️ Agregar uno por uno",
+                "📝 Lista rápida (copiar/pegar)",
+                "📄 Subir archivo",
+                "🧪 Usar datos de ejemplo"
+            ],
+            horizontal=True
+        )
         
-        with col2:
-            st.markdown("### 📋 Formato Requerido")
-            st.markdown("""
-            **Columnas necesarias:**
-            - **Descripción**: detalle del gasto
-            - **Monto**: valor del gasto  
-            - **Fecha**: fecha del gasto (opcional)
-            """)
-            
-            # Ejemplo visual
-            st.markdown("### 🎯 Ejemplo")
-            example_df = pd.DataFrame({
-                'fecha': ['2024-01-15', '2024-01-16'],
-                'descripcion': ['Supermercado Carrefour', 'Uber centro'],
-                'monto': [15500.50, 2800.00]
-            })
-            st.dataframe(example_df, use_container_width=True)
+        st.markdown("---")
         
-        # Procesar datos
-        if uploaded_file is not None or st.session_state.get('use_example', False):
+        # MÉTODO 1: Entrada individual
+        if input_method == "✍️ Agregar uno por uno":
+            st.markdown("### ✍️ Agregar Gasto Individual")
+            st.markdown("*Perfecto para ir agregando gastos conforme los haces*")
             
-            with st.spinner("🔄 Procesando datos..."):
+            # Inicializar lista de gastos en session_state
+            if 'gastos_individuales' not in st.session_state:
+                st.session_state.gastos_individuales = []
+            
+            with st.form("gasto_individual", clear_on_submit=True):
+                col1, col2 = st.columns([3, 1])
                 
-                if st.session_state.get('use_example', False):
-                    # Usar datos de ejemplo
-                    df_processed = create_sample_data()
-                    error = None
-                else:
-                    # Procesar archivo subido
-                    df_processed, insights, error = load_and_process_data(uploaded_file)
+                with col1:
+                    descripcion = st.text_input(
+                        "Descripción del gasto",
+                        placeholder="Ej: Supermercado Carrefour, Uber al trabajo, Netflix...",
+                        help="Describe tu gasto lo más específico posible"
+                    )
                 
-                if error:
-                    st.error(f"❌ Error: {error}")
-                    return
+                with col2:
+                    monto = st.number_input(
+                        "Monto ($)",
+                        min_value=0.0,
+                        step=0.01,
+                        format="%.2f"
+                    )
                 
-                if df_processed is not None and len(df_processed) > 0:
-                    
-                    # Categorización IA
-                    with st.spinner("🤖 Categorizando con IA..."):
+                col3, col4 = st.columns(2)
+                
+                with col3:
+                    fecha = st.date_input(
+                        "Fecha",
+                        value=datetime.now().date(),
+                        help="¿Cuándo hiciste este gasto?"
+                    )
+                
+                with col4:
+                    categoria_manual = st.selectbox(
+                        "Categoría (opcional)",
+                        ["🤖 Dejar que la IA decida", "🍽️ Alimentación", "🚗 Transporte", "⚡ Servicios", 
+                        "🎬 Entretenimiento", "🏥 Salud", "👔 Ropa", "🏠 Hogar", "📚 Educación", "📦 Otros"],
+                        help="Si sabes la categoría, selecciónala. Si no, la IA la predicirá."
+                    )
+                
+                submitted = st.form_submit_button("🎯 Categorizar y Agregar", use_container_width=True)
+                
+                if submitted and descripcion and monto > 0:
+                    # Predecir categoría si no se especificó
+                    if categoria_manual == "🤖 Dejar que la IA decida":
                         categorizer = get_trained_categorizer()
-                        predictions = categorizer.predict_with_confidence(
-                            df_processed['descripcion'].tolist()
-                        )
+                        prediction = categorizer.predict_with_confidence([descripcion])[0]
+                        categoria_ia = prediction['categoria']
+                        confianza = prediction['confidence']
+                    else:
+                        categoria_ia = categoria_manual.split(' ', 1)[1]  # Remover emoji
+                        confianza = 1.0
+                    
+                    # Agregar a la lista
+                    nuevo_gasto = {
+                        'fecha': pd.to_datetime(fecha),
+                        'descripcion': descripcion,
+                        'monto': monto,
+                        'categoria_ia': categoria_ia,
+                        'confianza_ia': confianza
+                    }
+                    
+                    st.session_state.gastos_individuales.append(nuevo_gasto)
+                    
+                    # Mostrar confirmación
+                    st.success(f"✅ Agregado: {descripcion} - ${monto:,.2f} → **{categoria_ia}** ({confianza:.1%} confianza)")
+            
+            # Mostrar gastos de la sesión
+            if st.session_state.gastos_individuales:
+                st.markdown("### 📋 Gastos Agregados en Esta Sesión")
+                
+                df_session = pd.DataFrame(st.session_state.gastos_individuales)
+                
+                # Métricas rápidas
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📊 Total gastos", len(df_session))
+                with col2:
+                    st.metric("💰 Total monto", f"${df_session['monto'].sum():,.0f}")
+                with col3:
+                    st.metric("📈 Promedio", f"${df_session['monto'].mean():,.0f}")
+                
+                # Tabla de gastos
+                display_df = df_session.copy()
+                display_df['fecha'] = display_df['fecha'].dt.strftime('%Y-%m-%d')
+                display_df['monto'] = display_df['monto'].apply(lambda x: f"${x:,.2f}")
+                display_df['confianza_ia'] = display_df['confianza_ia'].apply(lambda x: f"{x:.1%}")
+                
+                st.dataframe(
+                    display_df[['fecha', 'descripcion', 'monto', 'categoria_ia', 'confianza_ia']],
+                    use_container_width=True,
+                    height=300
+                )
+                
+                # Botones de acción
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("📊 Analizar Gastos", type="primary", use_container_width=True):
+                        st.session_state['df_data'] = df_session
+                        st.session_state['data_loaded'] = True
+                        st.success("✅ ¡Datos listos para analizar! Ve a la pestaña Dashboard")
+                
+                with col2:
+                    if st.button("🗑️ Limpiar Lista", type="secondary", use_container_width=True):
+                        st.session_state.gastos_individuales = []
+                        st.rerun()
+                
+                with col3:
+                    # Exportar gastos de sesión
+                    csv_session = df_session.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="💾 Exportar CSV",
+                        data=csv_session,
+                        file_name=f"gastos_sesion_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+        
+        # MÉTODO 2: Lista rápida
+        elif input_method == "📝 Lista rápida (copiar/pegar)":
+            st.markdown("### 📝 Lista Rápida de Gastos")
+            st.markdown("*Copia y pega desde WhatsApp, notas, o escribe varios gastos de una vez*")
+            
+            # Mostrar ejemplos de formato
+            with st.expander("📋 Ver ejemplos de formato"):
+                st.markdown("""
+                **Formato simple** (descripción, monto):
+                ```
+                Supermercado Carrefour, 18500
+                Uber viaje trabajo, 2800
+                Netflix, 2490
+                ```
+                
+                **Con fechas** (fecha, descripción, monto):
+                ```
+                2024-01-15, Supermercado Carrefour, 18500
+                2024-01-16, Uber viaje trabajo, 2800
+                2024-01-17, Netflix, 2490
+                ```
+                
+                **Formato libre** (la IA entiende):
+                ```
+                - Supermercado: $18.500
+                - Uber: $2.800 (ayer)
+                - Netflix: $2.490
+                Cena restaurant: 15000 pesos
+                ```
+                """)
+            
+            texto_gastos = st.text_area(
+                "Pega o escribe tus gastos aquí:",
+                placeholder="Supermercado Carrefour, 18500\nUber viaje trabajo, 2800\nNetflix, 2490",
+                height=200,
+                help="Un gasto por línea. La IA es inteligente y entiende varios formatos."
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                fecha_base = st.date_input(
+                    "Fecha base (si no especificas fechas)",
+                    value=datetime.now().date()
+                )
+            
+            with col2:
+                auto_categorizar = st.checkbox(
+                    "Categorizar automáticamente",
+                    value=True,
+                    help="La IA categorizará todos los gastos automáticamente"
+                )
+            
+            if st.button("🚀 Procesar Lista", type="primary", use_container_width=True):
+                if texto_gastos.strip():
+                    with st.spinner("🤖 Procesando lista de gastos..."):
+                        # Procesar texto de gastos
+                        gastos_procesados = []
+                        lineas = [linea.strip() for linea in texto_gastos.split('\n') if linea.strip()]
                         
-                        df_processed['categoria_ia'] = [p['categoria'] for p in predictions]
-                        df_processed['confianza_ia'] = [p['confidence'] for p in predictions]
+                        for linea in lineas:
+                            # Limpiar línea
+                            linea = linea.replace('$', '').replace('.', '').replace('pesos', '').strip()
+                            
+                            # Intentar parsear diferentes formatos
+                            gasto_parseado = None
+                            
+                            # Formato: fecha, descripcion, monto
+                            if linea.count(',') >= 2:
+                                partes = [p.strip() for p in linea.split(',')]
+                                try:
+                                    fecha_gasto = pd.to_datetime(partes[0])
+                                    descripcion = partes[1]
+                                    monto = float(partes[2])
+                                    gasto_parseado = (fecha_gasto, descripcion, monto)
+                                except:
+                                    pass
+                            
+                            # Formato: descripcion, monto
+                            if not gasto_parseado and linea.count(',') == 1:
+                                partes = [p.strip() for p in linea.split(',')]
+                                try:
+                                    descripcion = partes[0]
+                                    monto = float(partes[1])
+                                    gasto_parseado = (pd.to_datetime(fecha_base), descripcion, monto)
+                                except:
+                                    pass
+                            
+                            # Formato libre con ':'
+                            if not gasto_parseado and ':' in linea:
+                                partes = linea.split(':')
+                                if len(partes) == 2:
+                                    try:
+                                        descripcion = partes[0].replace('-', '').strip()
+                                        monto_str = partes[1].strip()
+                                        # Extraer números
+                                        import re
+                                        numeros = re.findall(r'\d+', monto_str)
+                                        if numeros:
+                                            monto = float(''.join(numeros))
+                                            gasto_parseado = (pd.to_datetime(fecha_base), descripcion, monto)
+                                    except:
+                                        pass
+                            
+                            if gasto_parseado:
+                                gastos_procesados.append({
+                                    'fecha': gasto_parseado[0],
+                                    'descripcion': gasto_parseado[1],
+                                    'monto': gasto_parseado[2]
+                                })
+                        
+                        if gastos_procesados:
+                            df_lista = pd.DataFrame(gastos_procesados)
+                            
+                            # Categorizar con IA si está habilitado
+                            if auto_categorizar:
+                                categorizer = get_trained_categorizer()
+                                predictions = categorizer.predict_with_confidence(
+                                    df_lista['descripcion'].tolist()
+                                )
+                                
+                                df_lista['categoria_ia'] = [p['categoria'] for p in predictions]
+                                df_lista['confianza_ia'] = [p['confidence'] for p in predictions]
+                            else:
+                                df_lista['categoria_ia'] = 'Sin categorizar'
+                                df_lista['confianza_ia'] = 0.0
+                            
+                            # Mostrar resultados
+                            st.success(f"✅ {len(df_lista)} gastos procesados exitosamente!")
+                            
+                            # Vista previa
+                            st.markdown("### 👀 Vista Previa")
+                            display_df = df_lista.copy()
+                            display_df['fecha'] = display_df['fecha'].dt.strftime('%Y-%m-%d')
+                            display_df['monto'] = display_df['monto'].apply(lambda x: f"${x:,.0f}")
+                            if auto_categorizar:
+                                display_df['confianza_ia'] = display_df['confianza_ia'].apply(lambda x: f"{x:.1%}")
+                            
+                            st.dataframe(display_df, use_container_width=True)
+                            
+                            # Botones de acción
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                if st.button("📊 Analizar Estos Gastos", type="primary", use_container_width=True):
+                                    st.session_state['df_data'] = df_lista
+                                    st.session_state['data_loaded'] = True
+                                    st.success("✅ ¡Datos listos! Ve a la pestaña Dashboard")
+                            
+                            with col2:
+                                csv_data = df_lista.to_csv(index=False).encode('utf-8')
+                                st.download_button(
+                                    label="💾 Descargar como CSV",
+                                    data=csv_data,
+                                    file_name=f"gastos_lista_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+                        
+                        else:
+                            st.error("❌ No se pudieron procesar los gastos. Verifica el formato.")
+                else:
+                    st.warning("⚠️ Por favor ingresa algunos gastos para procesar.")
+        
+        # MÉTODO 3: Archivo (código existente mejorado)
+        elif input_method == "📄 Subir archivo":
+            st.markdown("### 📄 Subir Archivo de Gastos")
+            st.markdown("*Para cuando tienes muchos gastos en Excel, CSV o exportación del banco*")
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Área de carga con estilo (código existente)
+                st.markdown('<div class="upload-section">', unsafe_allow_html=True)
+                st.markdown("### 🎯 Arrastra tu archivo aquí")
+                
+                uploaded_file = st.file_uploader(
+                    "Selecciona tu archivo de gastos",
+                    type=['csv', 'xlsx', 'xls', 'json'],
+                    help="Formatos: CSV, Excel, JSON"
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Procesar archivo si se subió
+                if uploaded_file is not None:
+                    with st.spinner("🔄 Procesando archivo..."):
+                        df_processed, insights, error = load_and_process_data(uploaded_file)
+                        
+                        if error:
+                            st.error(f"❌ Error: {error}")
+                        elif df_processed is not None and len(df_processed) > 0:
+                            # Categorización IA
+                            with st.spinner("🤖 Categorizando con IA..."):
+                                categorizer = get_trained_categorizer()
+                                predictions = categorizer.predict_with_confidence(
+                                    df_processed['descripcion'].tolist()
+                                )
+                                
+                                df_processed['categoria_ia'] = [p['categoria'] for p in predictions]
+                                df_processed['confianza_ia'] = [p['confidence'] for p in predictions]
+                            
+                            # Guardar en session state
+                            st.session_state['df_data'] = df_processed
+                            st.session_state['data_loaded'] = True
+                            
+                            # Mostrar éxito (usar código existente)
+                            st.markdown('<div class="success-box">', unsafe_allow_html=True)
+                            st.markdown("### ✅ ¡Archivo procesado exitosamente!")
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Métricas rápidas (usar código existente)
+                            col1, col2, col3, col4 = st.columns(4)
+                            
+                            with col1:
+                                st.metric("📊 Transacciones", f"{len(df_processed):,}")
+                            
+                            with col2:
+                                total = df_processed['monto'].sum()
+                                st.metric("💰 Total", f"${total:,.0f}")
+                            
+                            with col3:
+                                promedio = df_processed['monto'].mean()
+                                st.metric("📈 Promedio", f"${promedio:,.0f}")
+                            
+                            with col4:
+                                categorias = df_processed['categoria_ia'].nunique()
+                                st.metric("🏷️ Categorías", categorias)
+                            
+                            # Vista previa
+                            st.markdown("### 👀 Vista Previa")
+                            preview_cols = ['fecha', 'descripcion', 'monto', 'categoria_ia', 'confianza_ia']
+                            available_cols = [col for col in preview_cols if col in df_processed.columns]
+                            st.dataframe(
+                                df_processed[available_cols].head(10),
+                                use_container_width=True
+                            )
+            
+            with col2:
+                # Información de formato (código existente)
+                st.markdown("### 📋 Formato Requerido")
+                st.markdown("""
+                **Columnas necesarias:**
+                - **Descripción**: detalle del gasto
+                - **Monto**: valor del gasto  
+                - **Fecha**: fecha del gasto (opcional)
+                """)
+                
+                # Ejemplo visual
+                st.markdown("### 🎯 Ejemplo")
+                example_df = pd.DataFrame({
+                    'fecha': ['2024-01-15', '2024-01-16'],
+                    'descripcion': ['Supermercado Carrefour', 'Uber centro'],
+                    'monto': [15500.50, 2800.00]
+                })
+                st.dataframe(example_df, use_container_width=True)
+                
+                # Plantillas descargables
+                st.markdown("### 📥 Plantillas")
+                
+                template_data = pd.DataFrame({
+                    'fecha': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                    'descripcion': ['Supermercado ejemplo', 'Transporte ejemplo', 'Servicio ejemplo'],
+                    'monto': [10000.00, 2500.00, 5000.00]
+                })
+                
+                csv_template = template_data.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📄 Plantilla CSV",
+                    data=csv_template,
+                    file_name="plantilla_gastos.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        
+        # MÉTODO 4: Datos de ejemplo
+        elif input_method == "🧪 Usar datos de ejemplo":
+            st.markdown("### 🧪 Datos de Ejemplo")
+            st.markdown("*Perfecto para probar el sistema sin tener que subir tus propios datos*")
+            
+            st.info("Los datos de ejemplo incluyen gastos típicos argentinos con diferentes categorías para que puedas probar todas las funcionalidades del sistema.")
+            
+            # Vista previa de datos de ejemplo
+            sample_preview = pd.DataFrame({
+                'fecha': ['2024-01-15', '2024-01-16', '2024-01-17'],
+                'descripcion': ['Supermercado Carrefour Villa Crespo', 'Uber viaje centro', 'Netflix Suscripción'],
+                'monto': [18500.50, 2800.00, 2490.00],
+                'categoria': ['Alimentación', 'Transporte', 'Entretenimiento']
+            })
+            
+            st.markdown("### 👀 Vista Previa de Datos de Ejemplo")
+            st.dataframe(sample_preview, use_container_width=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                cantidad_gastos = st.slider(
+                    "🎚️ Cantidad de gastos de ejemplo",
+                    min_value=10,
+                    max_value=100,
+                    value=35,
+                    help="Más gastos = análisis más completo"
+                )
+            
+            with col2:
+                periodo_dias = st.slider(
+                    "📅 Período (días)",
+                    min_value=7,
+                    max_value=90,
+                    value=30,
+                    help="Gastos distribuidos en este período"
+                )
+            
+            if st.button("🎯 Generar y Usar Datos de Ejemplo", type="primary", use_container_width=True):
+                with st.spinner("🤖 Generando datos de ejemplo..."):
+                    # Generar datos de ejemplo más realistas
+                    import random
+                    
+                    gastos_ejemplo = [
+                        ('Supermercado Carrefour Villa Crespo', 'Alimentación', (8000, 25000)),
+                        ('Panaderia La Esquina', 'Alimentación', (1500, 5000)),
+                        ('McDonalds Palermo', 'Alimentación', (3000, 8000)),
+                        ('Restaurant Don Julio', 'Alimentación', (15000, 35000)),
+                        ('Verduleria Central', 'Alimentación', (2000, 8000)),
+                        ('Uber viaje centro', 'Transporte', (1500, 5000)),
+                        ('YPF Combustible', 'Transporte', (8000, 20000)),
+                        ('SUBE recarga', 'Transporte', (1000, 3000)),
+                        ('Taxi Aeropuerto', 'Transporte', (5000, 12000)),
+                        ('Peaje Autopista', 'Transporte', (300, 1000)),
+                        ('Edenor Factura Electricidad', 'Servicios', (8000, 18000)),
+                        ('Movistar Plan Celular', 'Servicios', (6000, 12000)),
+                        ('Fibertel Internet', 'Servicios', (4000, 8000)),
+                        ('Metrogas Factura', 'Servicios', (10000, 20000)),
+                        ('Expensas Edificio', 'Servicios', (25000, 60000)),
+                        ('Netflix Suscripcion', 'Entretenimiento', (2000, 3000)),
+                        ('Cine Hoyts Palermo', 'Entretenimiento', (2500, 5000)),
+                        ('Spotify Premium', 'Entretenimiento', (1000, 2000)),
+                        ('Bar Antares Cerveza', 'Entretenimiento', (5000, 15000)),
+                        ('Steam Videojuego', 'Entretenimiento', (8000, 25000)),
+                        ('Farmacity Medicamentos', 'Salud', (3000, 8000)),
+                        ('Dr. Martinez Consulta', 'Salud', (10000, 25000)),
+                        ('Dentista Limpieza', 'Salud', (15000, 30000)),
+                        ('Laboratorio Analisis', 'Salud', (5000, 15000)),
+                        ('Zara Camisa Trabajo', 'Ropa', (8000, 20000)),
+                        ('Nike Zapatillas Running', 'Ropa', (25000, 50000)),
+                        ('H&M Pantalon Jean', 'Ropa', (6000, 15000)),
+                        ('Easy Herramientas', 'Hogar', (3000, 10000)),
+                        ('Sodimac Pintura', 'Hogar', (5000, 15000)),
+                        ('IKEA Escritorio', 'Hogar', (30000, 80000)),
+                        ('Universidad UTN Cuota', 'Educación', (15000, 35000)),
+                        ('Udemy Curso Python', 'Educación', (8000, 20000)),
+                        ('Libros Amazon', 'Educación', (5000, 15000))
+                    ]
+                    
+                    # Generar gastos aleatorios
+                    datos_ejemplo = []
+                    fecha_inicio = datetime.now() - timedelta(days=periodo_dias)
+                    
+                    for i in range(cantidad_gastos):
+                        gasto_info = random.choice(gastos_ejemplo)
+                        descripcion = gasto_info[0]
+                        categoria = gasto_info[1]
+                        rango_monto = gasto_info[2]
+                        
+                        # Fecha aleatoria en el período
+                        dias_random = random.randint(0, periodo_dias)
+                        fecha = fecha_inicio + timedelta(days=dias_random)
+                        
+                        # Monto aleatorio en el rango
+                        monto = random.uniform(rango_monto[0], rango_monto[1])
+                        
+                        datos_ejemplo.append({
+                            'fecha': fecha,
+                            'descripcion': descripcion,
+                            'monto': round(monto, 2),
+                            'categoria_ia': categoria,
+                            'confianza_ia': random.uniform(0.85, 0.98)  # Alta confianza para ejemplos
+                        })
+                    
+                    df_ejemplo = pd.DataFrame(datos_ejemplo)
+                    df_ejemplo = df_ejemplo.sort_values('fecha')
                     
                     # Guardar en session state
-                    st.session_state['df_data'] = df_processed
+                    st.session_state['df_data'] = df_ejemplo
                     st.session_state['data_loaded'] = True
                     
-                    # Mostrar éxito
-                    st.markdown('<div class="success-box">', unsafe_allow_html=True)
-                    st.markdown("### ✅ ¡Datos procesados exitosamente!")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.success(f"✅ {len(df_ejemplo)} gastos de ejemplo generados y listos para analizar!")
                     
                     # Métricas rápidas
                     col1, col2, col3, col4 = st.columns(4)
                     
                     with col1:
-                        st.metric("📊 Transacciones", f"{len(df_processed):,}")
+                        st.metric("📊 Transacciones", f"{len(df_ejemplo):,}")
                     
                     with col2:
-                        total = df_processed['monto'].sum()
+                        total = df_ejemplo['monto'].sum()
                         st.metric("💰 Total", f"${total:,.0f}")
                     
                     with col3:
-                        promedio = df_processed['monto'].mean()
+                        promedio = df_ejemplo['monto'].mean()
                         st.metric("📈 Promedio", f"${promedio:,.0f}")
                     
                     with col4:
-                        categorias = df_processed['categoria_ia'].nunique()
+                        categorias = df_ejemplo['categoria_ia'].nunique()
                         st.metric("🏷️ Categorías", categorias)
                     
-                    # Vista previa
-                    st.markdown("### 👀 Vista Previa")
-                    preview_cols = ['fecha', 'descripcion', 'monto', 'categoria_ia', 'confianza_ia']
-                    available_cols = [col for col in preview_cols if col in df_processed.columns]
-                    st.dataframe(
-                        df_processed[available_cols].head(10),
-                        use_container_width=True
-                    )
-                
-                else:
-                    st.error("❌ No se pudieron procesar los datos")
-    
-    # TAB 2: Dashboard
-    with tab2:
-        if not st.session_state.get('data_loaded', False):
-            st.warning("⚠️ Primero carga tus datos en la pestaña 'Cargar Datos'")
-            return
-        
-        df = st.session_state['df_data']
-        
-        st.header("📊 Dashboard Interactivo")
-        
-        # Métricas principales con estilo
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            total = df['monto'].sum()
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>💰 Total Gastado</h3>
-                <h2>${total:,.0f}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            promedio = df['monto'].mean()
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>📊 Gasto Promedio</h3>
-                <h2>${promedio:,.0f}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            max_gasto = df['monto'].max()
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>📈 Gasto Máximo</h3>
-                <h2>${max_gasto:,.0f}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            analyzer = ExpenseAnalyzer()
-            df_anomalies = analyzer.detect_anomalies(df.copy())
-            anomalies_count = df_anomalies['is_anomaly'].sum()
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>⚠️ Gastos Anómalos</h3>
-                <h2>{anomalies_count}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Gráficos principales
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            pie_chart = create_category_pie_chart(df)
-            st.plotly_chart(pie_chart, use_container_width=True)
-        
-        with col2:
-            bar_chart = create_category_bar_chart(df)
-            st.plotly_chart(bar_chart, use_container_width=True)
-        
-        # Timeline si hay fechas
-        if 'fecha' in df.columns:
-            timeline_chart = create_timeline_chart(df)
-            if timeline_chart:
-                st.plotly_chart(timeline_chart, use_container_width=True)
-        
-        # Top gastos
-        st.markdown("### 🏆 Top 10 Gastos")
-        top_gastos = df.nlargest(10, 'monto')[['descripcion', 'monto', 'categoria_ia']]
-        st.dataframe(top_gastos, use_container_width=True)
-    
-    # TAB 3: Análisis detallado
-    with tab3:
-        if not st.session_state.get('data_loaded', False):
-            st.warning("⚠️ Primero carga tus datos en la pestaña 'Cargar Datos'")
-            return
-        
-        df = st.session_state['df_data']
-        st.header("🔍 Análisis Detallado")
-        
-        # Filtros en sidebar
-        with st.sidebar:
-            st.markdown("### 🔧 Filtros de Análisis")
-            
-            # Filtro por categoría
-            categorias = ['Todas'] + sorted(df['categoria_ia'].unique().tolist())
-            categoria_seleccionada = st.selectbox("📂 Categoría", categorias)
-            
-            # Filtro por monto
-            min_val, max_val = float(df['monto'].min()), float(df['monto'].max())
-            rango_montos = st.slider(
-                "💰 Rango de Montos",
-                min_value=min_val,
-                max_value=max_val,
-                value=(min_val, max_val),
-                format="$%.0f"
-            )
-        
-        # Aplicar filtros
-        df_filtered = df.copy()
-        
-        if categoria_seleccionada != 'Todas':
-            df_filtered = df_filtered[df_filtered['categoria_ia'] == categoria_seleccionada]
-        
-        df_filtered = df_filtered[
-            (df_filtered['monto'] >= rango_montos[0]) & 
-            (df_filtered['monto'] <= rango_montos[1])
-        ]
-        
-        # Mostrar resultados filtrados
-        st.subheader(f"📋 Resultados Filtrados ({len(df_filtered):,} registros)")
-        
-        if len(df_filtered) > 0:
-            # Estadísticas del filtro
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("💰 Total Filtrado", f"${df_filtered['monto'].sum():,.0f}")
-            with col2:
-                st.metric("📊 Promedio", f"${df_filtered['monto'].mean():,.0f}")
-            with col3:
-                percentage = (len(df_filtered) / len(df)) * 100
-                st.metric("📈 % del Total", f"{percentage:.1f}%")
-            
-            # Tabla de datos
-            st.dataframe(
-                df_filtered.sort_values('monto', ascending=False),
-                use_container_width=True,
-                height=400
-            )
-            
-            # Análisis de anomalías
-            st.subheader("⚠️ Detección de Anomalías")
-            
-            analyzer = ExpenseAnalyzer()
-            df_anomalies = analyzer.detect_anomalies(df_filtered.copy())
-            anomalies = df_anomalies[df_anomalies['is_anomaly'] == True]
-            
-            if len(anomalies) > 0:
-                st.warning(f"🚨 {len(anomalies)} gastos anómalos detectados")
-                st.dataframe(
-                    anomalies[['descripcion', 'monto', 'categoria_ia', 'z_score']].sort_values('monto', ascending=False),
-                    use_container_width=True
-                )
-            else:
-                st.success("✅ No se detectaron anomalías en los datos filtrados")
-        
-        else:
-            st.warning("⚠️ No hay datos que coincidan con los filtros seleccionados")
-    
-    # TAB 4: Reportes
-    with tab4:
-        if not st.session_state.get('data_loaded', False):
-            st.warning("⚠️ Primero carga tus datos en la pestaña 'Cargar Datos'")
-            return
-        
-        df = st.session_state['df_data']
-        st.header("📋 Reportes y Exportación")
-        
-        # Resumen ejecutivo
-        st.subheader("📊 Resumen Ejecutivo")
-        
-        formatter = CurrencyFormatter()
-        analyzer = ExpenseAnalyzer()
-        stats = analyzer.generate_summary_stats(df)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown(f"""
-            ### 💰 Estadísticas Financieras
-            
-            - **Total gastado**: ${stats['total_amount']:,.2f}
-            - **Promedio por transacción**: ${stats['average_transaction']:,.2f}
-            - **Mediana**: ${stats['median_transaction']:,.2f}
-            - **Gasto máximo**: ${stats['max_transaction']:,.2f}
-            - **Gasto mínimo**: ${stats['min_transaction']:,.2f}
-            - **Desviación estándar**: ${stats['std_transaction']:,.2f}
-            """)
-        
-        with col2:
-            # Distribución por categorías
-            st.markdown("### 🏷️ Distribución por Categorías")
-            
-            for categoria in df['categoria_ia'].value_counts().head(5).index:
-                cat_data = df[df['categoria_ia'] == categoria]
-                total = cat_data['monto'].sum()
-                count = len(cat_data)
-                percentage = (total / df['monto'].sum()) * 100
-                
-                st.markdown(f"""
-                <div class="category-chip">
-                    {categoria}: ${total:,.0f} ({count} gastos - {percentage:.1f}%)
-                </div>
-                """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        # Análisis detallado por categorías
-        st.subheader("📈 Análisis Detallado por Categorías")
-        
-        category_analysis = df.groupby('categoria_ia').agg({
-            'monto': ['sum', 'count', 'mean', 'std'],
-            'confianza_ia': 'mean'
-        }).round(2)
-        
-        category_analysis.columns = ['Total ($)', 'Cantidad', 'Promedio ($)', 'Desv. Est. ($)', 'Confianza IA']
-        category_analysis['% del Total'] = ((category_analysis['Total ($)'] / df['monto'].sum()) * 100).round(1)
-        category_analysis = category_analysis.sort_values('Total ($)', ascending=False)
-        
-        st.dataframe(category_analysis, use_container_width=True)
-        
-        # Exportación
-        st.subheader("💾 Exportar Datos y Reportes")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            # Exportar datos procesados
-            csv_data = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📄 Descargar Datos (CSV)",
-                data=csv_data,
-                file_name=f"gastos_analizados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        with col2:
-            # Exportar reporte completo
-            reporte = {
-                'fecha_reporte': datetime.now().isoformat(),
-                'resumen': {
-                    'total_transacciones': len(df),
-                    'monto_total': float(df['monto'].sum()),
-                    'promedio': float(df['monto'].mean()),
-                    'periodo_analizado': f"{df['fecha'].min()} a {df['fecha'].max()}" if 'fecha' in df.columns else 'No especificado'
-                },
-                'estadisticas': {k: float(v) if isinstance(v, (int, float)) else str(v) for k, v in stats.items()},
-                'categorias': category_analysis.to_dict(),
-                'top_gastos': df.nlargest(10, 'monto')[['descripcion', 'monto', 'categoria_ia']].to_dict('records')
-            }
-            
-            json_data = json.dumps(reporte, indent=2, ensure_ascii=False, default=str).encode('utf-8')
-            st.download_button(
-                label="📊 Descargar Reporte (JSON)",
-                data=json_data,
-                file_name=f"reporte_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        
-        with col3:
-            # Exportar solo categorías
-            category_csv = category_analysis.to_csv().encode('utf-8')
-            st.download_button(
-                label="🏷️ Análisis Categorías (CSV)",
-                data=category_csv,
-                file_name=f"analisis_categorias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+                    st.info("🎉 ¡Perfecto! Ahora ve a la pestaña **Dashboard** para ver el análisis completo.")
 
+def show_quick_actions():
+    """Mostrar acciones rápidas cuando hay datos cargados"""
+    if st.session_state.get('data_loaded', False):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### ⚡ Acciones Rápidas")
+        
+        df = st.session_state['df_data']
+        
+        # Métricas en sidebar
+        st.sidebar.metric("📊 Total gastos", len(df))
+        st.sidebar.metric("💰 Total", f"${df['monto'].sum():,.0f}")
+        
+        # Gasto único rápido
+        with st.sidebar.expander("➕ Agregar Gasto Rápido"):
+            with st.form("gasto_rapido_sidebar"):
+                desc_rapido = st.text_input("Descripción", placeholder="Ej: Café Starbucks")
+                monto_rapido = st.number_input("Monto", min_value=0.0, step=1.0)
+                
+                if st.form_submit_button("Agregar"):
+                    if desc_rapido and monto_rapido > 0:
+                        categorizer = get_trained_categorizer()
+                        prediction = categorizer.predict_with_confidence([desc_rapido])[0]
+                        
+                        nuevo_gasto = pd.DataFrame([{
+                            'fecha': pd.to_datetime(datetime.now().date()),
+                            'descripcion': desc_rapido,
+                            'monto': monto_rapido,
+                            'categoria_ia': prediction['categoria'],
+                            'confianza_ia': prediction['confidence']
+                        }])
+                        
+                        st.session_state['df_data'] = pd.concat([df, nuevo_gasto], ignore_index=True)
+                        st.success(f"✅ Agregado: {prediction['categoria']}")
+                        st.rerun()    
 if __name__ == "__main__":
     # Inicializar session state
     if 'data_loaded' not in st.session_state:
